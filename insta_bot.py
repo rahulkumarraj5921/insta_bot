@@ -1,32 +1,27 @@
 import os
 import threading
-import requests
-import asyncio
+import yt_dlp
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# ⚠️ Render Settings se Token aayega
 TELEGRAM_BOT_TOKEN = os.environ.get("BOT_TOKEN")
 INSTA_LINK = "https://instagram.com/rahul_kumar_raj_592"
 
-# 🌐 WEB SERVER (Render ko active rakhne ke liye)
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Ninja Bot is Running on Lifetime Free API! 🚀"
+    return "Ninja Bot: Direct Download Mode ON! 🚀"
 
 def run_web():
-    # Render default port 8080 use karta hai
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# 🤖 BOT LOGIC
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
-        "🚀 **Insta Ninja Downloader (Lifetime Free)** 🚀\n\n"
-        "नमस्ते! मैं बिना किसी लिमिट के Instagram Reels डाउनलोड कर सकता हूँ। ⚡\n\n"
+        "🚀 **Insta Ninja Downloader (Direct Mode)** 🚀\n\n"
+        "बिना किसी API Key के, सीधे सर्वर से डाउनलोड! ⚡\n\n"
         "🎯 *बस मुझे रील का लिंक भेजें!*\n\n"
         "👇 **Developer को सपोर्ट करने के लिए फॉलो करें:**"
     )
@@ -42,43 +37,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ दोस्त, कृपया सही Instagram लिंक भेजें!")
         return
 
-    status_msg = await update.message.reply_text("🔍 **वीडियो प्रोसेस किया जा रहा है...**")
+    status_msg = await update.message.reply_text("⚙️ **डायरेक्ट सर्वर से वीडियो निकाला जा रहा है...**")
     await context.bot.send_chat_action(chat_id=chat_id, action='upload_video')
 
+    file_path = f"reel_{chat_id}.mp4"
+
     try:
-        # 🪄 COBALT API (No API Key Needed - Lifetime Free)
-        api_url = "https://api.cobalt.tools/api/json"
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "url": url,
-            "vQuality": "720"
+        # 🪄 YT-DLP MAGIC (No API Needed)
+        ydl_opts = {
+            'outtmpl': file_path,
+            'format': 'best',
+            'quiet': True,
+            'noplaylist': True,
+            'no_warnings': True
         }
 
-        # API Request
-        response = requests.post(api_url, json=payload, headers=headers)
-        data = response.json()
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
 
-        # Extract Video URL
-        video_url = data.get("url")
-
-        if not video_url:
-            await status_msg.edit_text("❌ अभी सर्वर बिज़ी है या लिंक प्राइवेट है। कृपया कुछ देर बाद प्रयास करें।")
-            return
-
-        await status_msg.edit_text("📥 **सर्वर से वीडियो डाउनलोड हो रहा है...**")
-
-        # Download file to Render server
-        file_path = f"reel_{chat_id}.mp4"
-        video_response = requests.get(video_url)
-        with open(file_path, 'wb') as f:
-            f.write(video_response.content)
+        if not os.path.exists(file_path):
+            raise Exception("वीडियो फाइल नहीं बन पाई।")
 
         await status_msg.edit_text("📤 **टेलीग्राम पर भेजा जा रहा है... 🚀**")
 
-        # Send to User
         keyboard = [[InlineKeyboardButton("🔥 Follow Rahul on Instagram 🔥", url=INSTA_LINK)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -86,19 +67,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_video(
                 chat_id=chat_id,
                 video=video_file,
-                supports_streaming=True,
-                caption="🎬 **Download Successful!** ✅\n\n⚡ *Powered by Ninja Free API*",
+                caption="🎬 **Download Successful!** ✅\n\n⚡ *Powered by Direct Ninja Engine*",
                 reply_markup=reply_markup
             )
         
         await status_msg.delete()
 
     except Exception as e:
-        await status_msg.edit_text(f"❌ **Error:** अभी API रिस्पॉन्स नहीं दे रही है।")
-        print(f"Error: {e}")
+        await status_msg.edit_text("❌ **Error:** Instagram ने रिक्वेस्ट रोक दी या रील प्राइवेट है।")
+        print(f"Direct Error: {e}")
 
     finally:
-        if 'file_path' in locals() and os.path.exists(file_path):
+        if os.path.exists(file_path):
             os.remove(file_path)
 
 def main():
@@ -106,16 +86,15 @@ def main():
         print("⚠️ Error: BOT_TOKEN nahi mila!")
         return
 
-    # Start Web Server in separate thread
     threading.Thread(target=run_web, daemon=True).start()
     
-    # Start Bot
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Ninja Bot is Running 24/7 (Lifetime Free Mode)!")
+    print("🚀 Ninja Bot (Direct Mode) is Running!")
     application.run_polling()
 
 if __name__ == '__main__':
     main()
+
