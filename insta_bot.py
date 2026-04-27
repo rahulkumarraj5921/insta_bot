@@ -9,7 +9,8 @@ TELEGRAM_BOT_TOKEN = os.environ.get("BOT_TOKEN")
 INSTA_LINK = "https://instagram.com/rahul_kumar_raj_592"
 
 # Yahan aapka real Admin ID set kar diya gaya hai
-ADMIN_ID = 5868140731
+ADMIN_ID = -1003901141197
+
 
 app = Flask(__name__)
 
