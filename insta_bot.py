@@ -79,7 +79,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ दोस्त, कृपया सही Instagram लिंक भेजें!")
         return
 
-    status_msg = await update.message.reply_text("⚙️ <b>डायरेक्ट सर्वर से वीडियो निकाला जा रहा है...</b>", parse_mode='HTML')
+    status_msg = await update.message.reply_text("⚙️ <i><b>डायरेक्ट सर्वर से वीडियो निकाला जा रहा है...</b><i>", parse_mode='HTML')
     await context.bot.send_chat_action(chat_id=chat_id, action='upload_video')
 
     file_path = f"reel_{chat_id}.mp4"
@@ -99,7 +99,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not os.path.exists(file_path):
             raise Exception("Video file nahi ban payi.")
 
-        await status_msg.edit_text("📤 <b>टेलीग्राम पर भेजा जा रहा है... 🚀</b>", parse_mode='HTML')
+        await status_msg.edit_text("📤 <b><i>टेलीग्राम पर भेजा जा रहा है... 🚀<i></b>", parse_mode='HTML')
 
         keyboard = [[InlineKeyboardButton("🔥 Follow Rahul on Instagram 🔥", url=INSTA_LINK)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
