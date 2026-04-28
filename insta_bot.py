@@ -99,7 +99,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not os.path.exists(file_path):
             raise Exception("Video file nahi ban payi.")
 
-        await status_msg.edit_text("📤 <b>Telegram पर भेजा जा रहा है... 🚀</b>", parse_mode='HTML')
+        await status_msg.edit_text("📤 <b>टेलीग्राम पर भेजा जा रहा है... 🚀</b>", parse_mode='HTML')
 
         keyboard = [[InlineKeyboardButton("🔥 Follow Rahul on Instagram 🔥", url=INSTA_LINK)]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -140,4 +140,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
