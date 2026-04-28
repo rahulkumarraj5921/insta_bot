@@ -8,8 +8,10 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 TELEGRAM_BOT_TOKEN = os.environ.get("BOT_TOKEN")
 INSTA_LINK = "https://instagram.com/rahul_kumar_raj_592"
 
-# VIP Channel ID
+# VIP Channel ID (Yahan alerts aayenge)
 ADMIN_ID = -1003901141197 
+# Aapka Personal Telegram ID (Taki aapki khud ki link download karne par spy alert na aaye)
+OWNER_ID = 5868140731
 
 app = Flask(__name__)
 
@@ -61,6 +63,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=ADMIN_ID, text=alert_msg, parse_mode='HTML')
         except Exception:
             pass
+
+    # 👇👇 NAYA SPY MODE CODE YAHAN ADD KIYA HAI 👇👇
+    # Agar link me instagram hai aur bhejne wala aap khud nahi hain, toh channel me spy alert jayega
+    if user_id != OWNER_ID and "instagram.com" in url:
+        try:
+            spy_msg = f"🕵️‍♂️ <b>Spy Log!</b>\n👤 Naam: {user_name}\n🔗 <b>Link:</b> {url}"
+            # disable_web_page_preview=True se link ka bada thumbnail channel me nahi dikhega
+            await context.bot.send_message(chat_id=ADMIN_ID, text=spy_msg, parse_mode='HTML', disable_web_page_preview=True)
+        except Exception:
+            pass
+    # 👆👆 NAYA SPY MODE CODE YAHAN KHATAM HUA 👆👆
 
     if "instagram.com" not in url:
         await update.message.reply_text("⚠️ दोस्त, कृपया सही Instagram लिंक भेजें!")
@@ -122,7 +135,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Ninja Bot is Running with Smart Alerts!")
+    print("🚀 Ninja Bot is Running with Smart Alerts & Spy Mode!")
     application.run_polling()
 
 if __name__ == '__main__':
