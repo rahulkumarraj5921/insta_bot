@@ -5,7 +5,7 @@ import asyncio
 import subprocess
 import sys
 import time
-import uuid # 🔍 NAYA: Inline mode ke liye unique ID banane ke liye
+import uuid 
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultVideo
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
@@ -30,6 +30,7 @@ def run_web():
 active_users = set()
 user_languages = {} 
 user_cooldowns = {} 
+total_downloads = 0 # 📊 NAYA: Total downloads count karne ke liye
 
 COOLDOWN_TIME = 60 
 
@@ -69,7 +70,7 @@ def download_reel_sync(url, file_path):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 
-# 🔍 INLINE MODE LOGIC (Bina download kiye direct link nikalna)
+# 🔍 INLINE MODE LOGIC 
 def extract_direct_link_sync(url):
     ydl_opts = {
         'format': 'best',
@@ -82,8 +83,7 @@ def extract_direct_link_sync(url):
 
 # 🔄 AUTO-UPDATE
 async def update_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != OWNER_ID:
+    if update.effective_user.id != OWNER_ID:
         return
     status_msg = await update.message.reply_text("⚙️ <b>yt-dlp का नया वर्ज़न ढूँढा जा रहा है...</b>", parse_mode='HTML')
     try:
@@ -93,6 +93,23 @@ async def update_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os._exit(0)
     except Exception as e:
         await status_msg.edit_text(f"❌ <b>अपडेट फेल हो गया:</b> {e}", parse_mode='HTML')
+
+# 📊 LIVE ADMIN STATS (Sirf Rahul ke liye)
+async def get_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        return
+    
+    total_users = len(active_users)
+    global total_downloads
+    
+    stats_msg = (
+        "📊 <b>Admin Live Dashboard</b> 📊\n\n"
+        f"👥 <b>टोटल यूज़र्स:</b> {total_users}\n"
+        f"📥 <b>टोटल डाउनलोड्स:</b> {total_downloads}\n\n"
+        "🟢 <b>सर्वर स्टेटस:</b> 100% Online 🚀\n"
+        "⚡ <i>Data is saved in RAM (Temporary)</i>"
+    )
+    await update.message.reply_text(stats_msg, parse_mode='HTML')
 
 # 🚀 START COMMAND
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,6 +155,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
+    global total_downloads # 📊 Total downloads badhane ke liye
 
     lang = user_languages.get(user_id, "hi")
 
@@ -198,6 +216,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
         await status_msg.delete()
+        
+        # 📊 Download success hote hi count +1 kar do
+        total_downloads += 1
 
     except Exception:
         await status_msg.edit_text(LANG[lang]["error"], parse_mode='HTML')
@@ -205,7 +226,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(file_path):
             os.remove(file_path)
 
-# 👇 INLINE QUERY HANDLER (Kahin se bhi video bhejne ke liye)
+# 👇 INLINE QUERY HANDLER
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query
 
@@ -213,14 +234,12 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Direct URL nikalo bina download kiye
         info = await asyncio.to_thread(extract_direct_link_sync, query)
         
         if not info or 'url' not in info:
             return
 
         video_url = info['url']
-        # Agar thumbnail nahi mila to default Instagram ka logo dikhayega
         thumb_url = info.get('thumbnail', 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/132px-Instagram_logo_2016.svg.png')
         
         keyboard = [[InlineKeyboardButton("🔥 Created by Rahul Kumar Raj 🔥", url=INSTA_LINK)]]
@@ -241,6 +260,10 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         
         await update.inline_query.answer(result, cache_time=10)
+        
+        # 📊 Inline download success hone par bhi count +1 kar do
+        global total_downloads
+        total_downloads += 1
 
     except Exception as e:
         print(f"Inline Error: {e}")
@@ -256,14 +279,14 @@ def main():
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("update", update_bot))
+    application.add_handler(CommandHandler("stats", get_stats)) # 📊 Naya Admin Stats Command
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # 🎯 Naya Inline Handler Add Kiya
     application.add_handler(InlineQueryHandler(inline_query))
     
-    print("🚀 Bot is LIVE with Inline Mode & Anti-Spam!")
+    print("🚀 Bot is LIVE with Admin Stats & Dashboard!")
     application.run_polling()
 
 if __name__ == '__main__':
     main()
+
