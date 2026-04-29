@@ -4,10 +4,11 @@ import yt_dlp
 import asyncio
 import subprocess
 import sys
-import time  # ⏳ NAYA: Timer lagane ke liye
+import time
+import uuid # 🔍 NAYA: Inline mode ke liye unique ID banane ke liye
 from flask import Flask
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultVideo
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
 
 TELEGRAM_BOT_TOKEN = os.environ.get("BOT_TOKEN")
 INSTA_LINK = "https://instagram.com/rahul_kumar_raj_592"
@@ -28,11 +29,11 @@ def run_web():
 # 🧠 SMART MEMORY & STORAGE
 active_users = set()
 user_languages = {} 
-user_cooldowns = {} # ⏳ NAYA: Har user ka aakhri time save karne ke liye
+user_cooldowns = {} 
 
-COOLDOWN_TIME = 60 # 60 second ka timer
+COOLDOWN_TIME = 60 
 
-# 🌍 DICTIONARY: Hindi aur English ke messages
+# 🌍 DICTIONARY
 LANG = {
     "en": {
         "welcome": "🚀 <b>Insta Ninja Downloader v2.0</b> 🚀\n\nHello! I can download any Instagram Reel in high quality. ⚡\n\n🎯 <b>Just send me the reel link!</b>\n\n👇 <b>Follow the Developer:</b>",
@@ -42,7 +43,7 @@ LANG = {
         "success": "🎬 <b>Download Successful!</b> ✅\n\n⚡ <i>Powered by Rahul Kumar Raj</i>",
         "error": "❌ <b>Error:</b> Instagram blocked the request or the reel is private.",
         "button_follow": "💖 Follow Rahul Kumar Raj 💖",
-        "cooldown": "⏳ <b>Spam Protection:</b> Please wait {time} seconds before sending another link!" # Naya message
+        "cooldown": "⏳ <b>Spam Protection:</b> Please wait {time} seconds before sending another link!" 
     },
     "hi": {
         "welcome": "🚀 <b>Insta Ninja Downloader v2.0</b> 🚀\n\nनमस्ते! मैं किसी भी Instagram Reel को हाई क्वालिटी में डाउनलोड कर सकता हूँ। ⚡\n\n🎯 <b>बस मुझे रील का लिंक भेजें!</b>\n\n👇 <b>Developer को सपोर्ट करने के लिए फॉलो करें:</b>",
@@ -52,10 +53,11 @@ LANG = {
         "success": "🎬 <b>Download Successful!</b> ✅\n\n⚡ <i>Powered by Rahul Kumar Raj</i>",
         "error": "❌ <b>Error:</b> Instagram ने रिक्वेस्ट रोक दी है या रील प्राइवेट है।",
         "button_follow": "💖 Follow Rahul Kumar Raj 💖",
-        "cooldown": "⏳ <b>स्पैम अलर्ट:</b> कृपया अगला लिंक भेजने से पहले {time} सेकंड प्रतीक्षा करें!" # Naya message
+        "cooldown": "⏳ <b>स्पैम अलर्ट:</b> कृपया अगला लिंक भेजने से पहले {time} सेकंड प्रतीक्षा करें!" 
     }
 }
 
+# 📥 NORMAL DOWNLOAD LOGIC
 def download_reel_sync(url, file_path):
     ydl_opts = {
         'outtmpl': file_path,
@@ -67,6 +69,18 @@ def download_reel_sync(url, file_path):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 
+# 🔍 INLINE MODE LOGIC (Bina download kiye direct link nikalna)
+def extract_direct_link_sync(url):
+    ydl_opts = {
+        'format': 'best',
+        'quiet': True,
+        'noplaylist': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        return ydl.extract_info(url, download=False)
+
+# 🔄 AUTO-UPDATE
 async def update_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != OWNER_ID:
@@ -80,6 +94,7 @@ async def update_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await status_msg.edit_text(f"❌ <b>अपडेट फेल हो गया:</b> {e}", parse_mode='HTML')
 
+# 🚀 START COMMAND
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
@@ -99,6 +114,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("🌍 <b>Please select your language / अपनी भाषा चुनें:</b>", parse_mode='HTML', reply_markup=reply_markup)
 
+# 🔘 LANGUAGE BUTTON
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -116,6 +132,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(LANG[lang]["welcome"], parse_mode='HTML', reply_markup=reply_markup)
 
+# 💬 NORMAL CHAT HANDLER
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     url = update.message.text
@@ -124,21 +141,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lang = user_languages.get(user_id, "hi")
 
-    # 👇👇 NAYA COOLDOWN (TIMER) LOGIC YAHAN HAI 👇👇
-    if user_id != OWNER_ID: # Owner par timer nahi lagega
+    # Anti-Spam Cooldown
+    if user_id != OWNER_ID: 
         current_time = time.time()
         if user_id in user_cooldowns:
             time_passed = current_time - user_cooldowns[user_id]
             if time_passed < COOLDOWN_TIME:
                 remaining_time = int(COOLDOWN_TIME - time_passed)
-                # Bachi hui seconds nikal kar message bhejna
                 cooldown_msg = LANG[lang]["cooldown"].replace("{time}", str(remaining_time))
                 await update.message.reply_text(cooldown_msg, parse_mode='HTML')
-                return # Yahan se wapas bhej do, aage ka code nahi chalega
-        
-        # Agar timer pass ho gaya, to naya time set kar do
+                return 
         user_cooldowns[user_id] = current_time
-    # 👆👆 COOLDOWN LOGIC KHATAM 👆👆
 
     if user_id != OWNER_ID and "instagram.com" in url:
         try:
@@ -192,6 +205,46 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(file_path):
             os.remove(file_path)
 
+# 👇 INLINE QUERY HANDLER (Kahin se bhi video bhejne ke liye)
+async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.inline_query.query
+
+    if not query or "instagram.com" not in query:
+        return
+
+    try:
+        # Direct URL nikalo bina download kiye
+        info = await asyncio.to_thread(extract_direct_link_sync, query)
+        
+        if not info or 'url' not in info:
+            return
+
+        video_url = info['url']
+        # Agar thumbnail nahi mila to default Instagram ka logo dikhayega
+        thumb_url = info.get('thumbnail', 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/132px-Instagram_logo_2016.svg.png')
+        
+        keyboard = [[InlineKeyboardButton("🔥 Created by Rahul Kumar Raj 🔥", url=INSTA_LINK)]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        result = [
+            InlineQueryResultVideo(
+                id=str(uuid.uuid4()),
+                video_url=video_url,
+                mime_type="video/mp4",
+                thumb_url=thumb_url,
+                title="🎬 Send Instagram Reel",
+                description="Click here to send video!",
+                caption="⚡ <i>Powered by Insta Ninja</i>",
+                parse_mode='HTML',
+                reply_markup=reply_markup
+            )
+        ]
+        
+        await update.inline_query.answer(result, cache_time=10)
+
+    except Exception as e:
+        print(f"Inline Error: {e}")
+
 def main():
     if not TELEGRAM_BOT_TOKEN:
         print("Error: BOT_TOKEN missing!")
@@ -206,7 +259,10 @@ def main():
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Bot is LIVE with Multi-Language & Anti-Spam Cooldown!")
+    # 🎯 Naya Inline Handler Add Kiya
+    application.add_handler(InlineQueryHandler(inline_query))
+    
+    print("🚀 Bot is LIVE with Inline Mode & Anti-Spam!")
     application.run_polling()
 
 if __name__ == '__main__':
