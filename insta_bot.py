@@ -34,7 +34,7 @@ total_downloads = 0
 
 COOLDOWN_TIME = 60 
 
-# 🌍 DICTIONARY (Ekdam Clean Welcome Message)
+# 🌍 DICTIONARY
 LANG = {
     "en": {
         "welcome": "🚀 <b>Insta Ninja Downloader v2.0</b> 🚀\n\nHello! I can download any Instagram Reel in high quality. ⚡\n\n🎯 <b>Just send me the reel link!</b>\n\n👇 <b>Follow the Developer:</b>",
@@ -65,19 +65,14 @@ def download_reel_sync(url, file_path):
         'format': 'best',
         'quiet': True,
         'noplaylist': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 
 # 🔍 INLINE MODE LOGIC 
 def extract_direct_link_sync(url):
-    ydl_opts = {
-        'format': 'best',
-        'quiet': True,
-        'noplaylist': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-    }
+    ydl_opts = {'format': 'best', 'quiet': True, 'noplaylist': True}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         return ydl.extract_info(url, download=False)
 
@@ -85,50 +80,80 @@ def extract_direct_link_sync(url):
 async def update_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         return
-    status_msg = await update.message.reply_text("⚙️ <b>yt-dlp का नया वर्ज़न ढूँढा जा रहा है...</b>", parse_mode='HTML')
+    status_msg = await update.message.reply_text("⚙️ <b>अपडेट...</b>", parse_mode='HTML')
     try:
         subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], check=True)
-        await status_msg.edit_text("✅ <b>अपडेट सक्सेसफुल!</b> 🚀\nरीस्टार्ट हो रहा हूँ...", parse_mode='HTML')
+        await status_msg.edit_text("✅ <b>अपडेट सक्सेसफुल!</b> 🚀", parse_mode='HTML')
         await asyncio.sleep(2)
         os._exit(0)
-    except Exception as e:
+    except Exception:
         pass
 
-# 📊 LIVE ADMIN STATS (Cleaned)
+# 📊 ADMIN STATS
 async def get_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         return
-    
-    total_users = len(active_users)
-    global total_downloads
-    
     stats_msg = (
         "📊 <b>Admin Live Dashboard</b> 📊\n\n"
-        f"👥 <b>टोटल यूज़र्स:</b> {total_users}\n"
+        f"👥 <b>टोटल यूज़र्स:</b> {len(active_users)}\n"
         f"📥 <b>टोटल डाउनलोड्स:</b> {total_downloads}\n\n"
         "🟢 <b>सर्वर स्टेटस:</b> 100% Online 🚀"
     )
     await update.message.reply_text(stats_msg, parse_mode='HTML')
 
+# 📢 NAYA: ADMIN BROADCAST FEATURE
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Check if user is the Owner
+    if user_id != OWNER_ID:
+        return
+
+    # Check if message is provided
+    message_to_send = update.message.text.replace("/broadcast", "").strip()
+    if not message_to_send:
+        await update.message.reply_text("⚠️ <b>प्लीज़ कमांड के साथ मैसेज भी टाइप करें!</b>\n\n<b>Example:</b> <code>/broadcast हेलो दोस्तों, बॉट 100% काम कर रहा है!</code>", parse_mode='HTML')
+        return
+
+    if not active_users:
+        await update.message.reply_text("⚠️ <b>अभी लिस्ट में कोई यूज़र नहीं है!</b>", parse_mode='HTML')
+        return
+
+    await update.message.reply_text(f"🚀 <b>ब्रॉडकास्ट शुरू हो रहा है...</b>\nकुल {len(active_users)} लोगों को भेजा जा रहा है।", parse_mode='HTML')
+
+    success_count = 0
+    failed_count = 0
+
+    # Sending messages to all active users
+    for uid in list(active_users):
+        try:
+            broadcast_msg = f"📢 <b>Admin Update</b> 📢\n\n{message_to_send}"
+            await context.bot.send_message(chat_id=uid, text=broadcast_msg, parse_mode='HTML')
+            success_count += 1
+            await asyncio.sleep(0.1) # Telegram ban se bachne ke liye thoda delay
+        except Exception:
+            failed_count += 1
+
+    # Send final report to admin
+    await update.message.reply_text(
+        f"✅ <b>ब्रॉडकास्ट कम्पलीट!</b>\n\n"
+        f"🟢 सक्सेसफुल: {success_count}\n"
+        f"🔴 फेल/ब्लॉक: {failed_count}", 
+        parse_mode='HTML'
+    )
+
 # 🚀 START COMMAND
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_name = update.effective_user.first_name
-
     if user_id not in active_users:
         active_users.add(user_id)
         try:
-            alert_msg = f"🚨 <b>New User Alert!</b>\n👤 Naam: {user_name}\n🆔 ID: <code>{user_id}</code>"
+            alert_msg = f"🚨 <b>New User!</b>\n👤 Naam: {update.effective_user.first_name}\n🆔: <code>{user_id}</code>"
             await context.bot.send_message(chat_id=ADMIN_ID, text=alert_msg, parse_mode='HTML')
-        except Exception:
-            pass
+        except Exception: pass
 
-    keyboard = [
-        [InlineKeyboardButton("🇮🇳 Hindi", callback_data="lang_hi"),
-         InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🌍 <b>Please select your language / अपनी भाषा चुनें:</b>", parse_mode='HTML', reply_markup=reply_markup)
+    keyboard = [[InlineKeyboardButton("🇮🇳 Hindi", callback_data="lang_hi"), InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")]]
+    await update.message.reply_text("🌍 <b>Please select your language:</b>", parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 # 🔘 LANGUAGE BUTTON
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -137,68 +162,49 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     data = query.data
 
-    if data == "lang_hi":
-        user_languages[user_id] = "hi"
-        lang = "hi"
-    elif data == "lang_en":
-        user_languages[user_id] = "en"
-        lang = "en"
-    
-    keyboard = [[InlineKeyboardButton(LANG[lang]["button_follow"], url=INSTA_LINK)]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(LANG[lang]["welcome"], parse_mode='HTML', reply_markup=reply_markup)
+    if data in ["lang_hi", "lang_en"]:
+        lang = "hi" if data == "lang_hi" else "en"
+        user_languages[user_id] = lang
+        keyboard = [[InlineKeyboardButton(LANG[lang]["button_follow"], url=INSTA_LINK)]]
+        await query.edit_message_text(LANG[lang]["welcome"], parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
-# 💬 NORMAL CHAT HANDLER (Super Fast)
+# 💬 NORMAL CHAT HANDLER 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     raw_url = update.message.text
     user_id = update.effective_user.id
-    user_name = update.effective_user.first_name
     global total_downloads 
 
-    lang = user_languages.get(user_id, "hi")
+    # Upar message bhejne par bhi user active list me add ho jayega
+    if user_id not in active_users:
+        active_users.add(user_id)
 
-    # 🛠️ URL Cleaner (Igsh Tracking hatane ke liye)
+    lang = user_languages.get(user_id, "hi")
     clean_url = raw_url.split("?")[0] if "instagram.com" in raw_url else raw_url
 
-    # Anti-Spam Cooldown
     if user_id != OWNER_ID: 
         current_time = time.time()
-        if user_id in user_cooldowns:
-            time_passed = current_time - user_cooldowns[user_id]
-            if time_passed < COOLDOWN_TIME:
-                remaining_time = int(COOLDOWN_TIME - time_passed)
-                cooldown_msg = LANG[lang]["cooldown"].replace("{time}", str(remaining_time))
-                await update.message.reply_text(cooldown_msg, parse_mode='HTML')
-                return 
+        if user_id in user_cooldowns and (current_time - user_cooldowns[user_id]) < COOLDOWN_TIME:
+            remaining_time = int(COOLDOWN_TIME - (current_time - user_cooldowns[user_id]))
+            await update.message.reply_text(LANG[lang]["cooldown"].replace("{time}", str(remaining_time)), parse_mode='HTML')
+            return 
         user_cooldowns[user_id] = current_time
 
     if "instagram.com" not in clean_url:
         await update.message.reply_text(LANG[lang]["invalid"], parse_mode='HTML')
         return
 
-    if user_id != OWNER_ID:
-        try:
-            spy_msg = f"🕵️‍♂️ <b>Spy Log!</b>\n👤 Naam: {user_name}\n🔗 <b>Link:</b> {clean_url}"
-            await context.bot.send_message(chat_id=ADMIN_ID, text=spy_msg, parse_mode='HTML', disable_web_page_preview=True)
-        except Exception:
-            pass
-
     status_msg = await update.message.reply_text(LANG[lang]["processing"], parse_mode='HTML')
     await context.bot.send_chat_action(chat_id=chat_id, action='upload_video')
 
     file_path = f"reel_{chat_id}.mp4"
-    max_retries = 3
     download_success = False
 
-    for attempt in range(max_retries):
+    for attempt in range(3):
         try:
             await asyncio.to_thread(download_reel_sync, clean_url, file_path)
-            if os.path.exists(file_path):
-                download_success = True
-                break
-        except Exception as e:
-            await asyncio.sleep(2)
+            if os.path.exists(file_path): download_success = True; break
+        except Exception: await asyncio.sleep(2)
 
     if not download_success:
         await status_msg.edit_text(LANG[lang]["error"], parse_mode='HTML')
@@ -207,87 +213,53 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await status_msg.edit_text(LANG[lang]["sending"], parse_mode='HTML')
         keyboard = [[InlineKeyboardButton(LANG[lang]["button_follow"], url=INSTA_LINK)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        # Hamesha as a Video send karega (Fastest method)
         with open(file_path, 'rb') as video_file:
-            await context.bot.send_video(
-                chat_id=chat_id,
-                video=video_file,
-                caption=LANG[lang]["success"],
-                parse_mode='HTML',
-                reply_markup=reply_markup
-            )
-                
+            await context.bot.send_video(chat_id=chat_id, video=video_file, caption=LANG[lang]["success"], parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
         await status_msg.delete()
         total_downloads += 1
-
     except Exception:
         await status_msg.edit_text(LANG[lang]["error"], parse_mode='HTML')
     finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        if os.path.exists(file_path): os.remove(file_path)
 
-# 👇 INLINE QUERY HANDLER (Fast)
+# 👇 INLINE QUERY HANDLER 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query
-
-    if not query or "instagram.com" not in query:
-        return
-
+    if not query or "instagram.com" not in query: return
     clean_query = query.split("?")[0]
+    
+    # Inline wale user ko bhi active list me daal do taaki broadcast mil sake
+    user_id = update.inline_query.from_user.id
+    if user_id not in active_users:
+        active_users.add(user_id)
 
     try:
         info = await asyncio.to_thread(extract_direct_link_sync, clean_query)
-        
-        if not info or 'url' not in info:
-            return
-
+        if not info or 'url' not in info: return
         video_url = info['url']
         thumb_url = info.get('thumbnail', 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/132px-Instagram_logo_2016.svg.png')
-        
         keyboard = [[InlineKeyboardButton("🔥 Created by Rahul Kumar Raj 🔥", url=INSTA_LINK)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        result = [
-            InlineQueryResultVideo(
-                id=str(uuid.uuid4()),
-                video_url=video_url,
-                mime_type="video/mp4",
-                thumb_url=thumb_url,
-                title="🎬 Send Instagram Reel",
-                description="Click here to send video!",
-                caption="⚡ <i>Powered by Insta Ninja</i>",
-                parse_mode='HTML',
-                reply_markup=reply_markup
-            )
-        ]
-        
+        result = [InlineQueryResultVideo(id=str(uuid.uuid4()), video_url=video_url, mime_type="video/mp4", thumb_url=thumb_url, title="🎬 Send Instagram Reel", description="Click here to send video!", caption="⚡ <i>Powered by Insta Ninja</i>", parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))]
         await update.inline_query.answer(result, cache_time=10)
-        
         global total_downloads
         total_downloads += 1
-
-    except Exception as e:
-        pass
+    except Exception: pass
 
 def main():
-    if not TELEGRAM_BOT_TOKEN:
-        print("Error: BOT_TOKEN missing!")
-        return
-
+    if not TELEGRAM_BOT_TOKEN: return
     threading.Thread(target=run_web, daemon=True).start()
-    
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("update", update_bot))
     application.add_handler(CommandHandler("stats", get_stats)) 
+    application.add_handler(CommandHandler("broadcast", broadcast)) # 📢 NAYA COMMAND
+    
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(InlineQueryHandler(inline_query))
     
-    print("🚀 Bot is LIVE - Clean, Fast & Simple!")
+    print("🚀 Bot is LIVE with Admin Broadcast!")
     application.run_polling()
 
 if __name__ == '__main__':
