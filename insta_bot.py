@@ -1,6 +1,7 @@
 import os
 import threading
 import yt_dlp
+import asyncio  # ⏳ नया: बॉट को बिना हैंग किए 2 सेकंड रुकने के लिए
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -71,22 +72,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     file_path = f"reel_{chat_id}.mp4"
 
+    # 👇👇 NAYA AUTO-RETRY LOGIC YAHAN SE SHURU 👇👇
+    max_retries = 3
+    download_success = False
+
+    for attempt in range(max_retries):
+        try:
+            ydl_opts = {
+                'outtmpl': file_path,
+                'format': 'best',
+                'quiet': True,
+                'noplaylist': True,
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+
+            if os.path.exists(file_path):
+                download_success = True
+                break # Agar video mil gaya, to loop se bahar aa jao
+
+        except Exception as e:
+            print(f"Attempt {attempt + 1} Failed: {e}")
+            await asyncio.sleep(2) # 2 second ruk kar dubara try karega bina bot hang kiye
+
+    # Agar 3 baar koshish ke baad bhi fail ho jaye
+    if not download_success:
+        await status_msg.edit_text("❌ <b>Error:</b> Instagram ne request rok di hai. Kripya thodi der baad dubara try karein.", parse_mode='HTML')
+        return
+    # 👆👆 AUTO-RETRY LOGIC YAHAN KHATAM 👆👆
+
+    # 👇👇 TELEGRAM PAR BHEJNE KA CODE 👇👇
     try:
-        # 🛠️ Advanced Options: Instagram blocking se bachne ke liye
-        ydl_opts = {
-            'outtmpl': file_path,
-            'format': 'best',
-            'quiet': True,
-            'noplaylist': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-
-        if not os.path.exists(file_path):
-            raise Exception("File not found")
-
         await status_msg.edit_text("📤 <b>Telegram par bheja ja raha hai... 🚀</b>", parse_mode='HTML')
 
         keyboard = [[InlineKeyboardButton("🔥 Follow Rahul on Instagram 🔥", url=INSTA_LINK)]]
@@ -104,8 +122,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.delete()
 
     except Exception as e:
-        await status_msg.edit_text("❌ <b>Error:</b> Instagram ne request rok di ya reel private hai.", parse_mode='HTML')
-        print(f"Download Error: {e}")
+        await status_msg.edit_text("❌ <b>Error:</b> Video bhejne me problem aayi.", parse_mode='HTML')
+        print(f"Telegram Upload Error: {e}")
 
     finally:
         if os.path.exists(file_path):
@@ -122,9 +140,8 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Bot is LIVE with HTML Tags and Spy Mode!")
+    print("🚀 Bot is LIVE with HTML Tags, Spy Mode & Auto-Retry!")
     application.run_polling()
 
 if __name__ == '__main__':
     main()
-
