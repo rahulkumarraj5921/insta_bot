@@ -1,7 +1,7 @@
 import os
 import threading
 import yt_dlp
-import asyncio  # ⏳ नया: बॉट को बिना हैंग किए 2 सेकंड रुकने के लिए
+import asyncio
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -26,6 +26,20 @@ def run_web():
 
 # 🧠 SMART MEMORY: Baar-baar alert rokne ke liye
 active_users = set()
+
+# 👇👇 NAYA MULTI-THREADING FUNCTION 👇👇
+# Yeh function background me chupke se download karega, taki bot hang na ho!
+def download_reel_sync(url, file_path):
+    ydl_opts = {
+        'outtmpl': file_path,
+        'format': 'best',
+        'quiet': True,
+        'noplaylist': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+# 👆👆 NAYA FUNCTION YAHAN KHATAM 👆👆
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -72,38 +86,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     file_path = f"reel_{chat_id}.mp4"
 
-    # 👇👇 NAYA AUTO-RETRY LOGIC YAHAN SE SHURU 👇👇
+    # Auto-Retry System
     max_retries = 3
     download_success = False
 
     for attempt in range(max_retries):
         try:
-            ydl_opts = {
-                'outtmpl': file_path,
-                'format': 'best',
-                'quiet': True,
-                'noplaylist': True,
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+            # 🚀 JADOO YAHAN HAI: asyncio.to_thread download ko background me bhej dega
+            await asyncio.to_thread(download_reel_sync, url, file_path)
 
             if os.path.exists(file_path):
                 download_success = True
-                break # Agar video mil gaya, to loop se bahar aa jao
+                break # Video mil gaya, loop se bahar
 
         except Exception as e:
             print(f"Attempt {attempt + 1} Failed: {e}")
-            await asyncio.sleep(2) # 2 second ruk kar dubara try karega bina bot hang kiye
+            await asyncio.sleep(2) # 2 second ruk kar dubara try karega
 
-    # Agar 3 baar koshish ke baad bhi fail ho jaye
     if not download_success:
         await status_msg.edit_text("❌ <b>Error:</b> Instagram ne request rok di hai. Kripya thodi der baad dubara try karein.", parse_mode='HTML')
         return
-    # 👆👆 AUTO-RETRY LOGIC YAHAN KHATAM 👆👆
 
-    # 👇👇 TELEGRAM PAR BHEJNE KA CODE 👇👇
+    # Telegram par bhejna
     try:
         await status_msg.edit_text("📤 <b>Telegram par bheja ja raha hai... 🚀</b>", parse_mode='HTML')
 
@@ -122,7 +126,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.delete()
 
     except Exception as e:
-        await status_msg.edit_text("❌ <b>Error:</b> Video bhejne me problem aayi.", parse_mode='HTML')
+        await status_msg.edit_text("❌ <b>Error:</b> Video bhejne me problem aayi. Shayad video 50MB se bada hai.", parse_mode='HTML')
         print(f"Telegram Upload Error: {e}")
 
     finally:
@@ -140,7 +144,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Bot is LIVE with HTML Tags, Spy Mode & Auto-Retry!")
+    print("🚀 Bot is LIVE with HTML Tags, Spy Mode, Auto-Retry & Multi-Threading!")
     application.run_polling()
 
 if __name__ == '__main__':
