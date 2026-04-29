@@ -4,6 +4,7 @@ import yt_dlp
 import asyncio
 import subprocess
 import sys
+import time  # ⏳ NAYA: Timer lagane ke liye
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -24,9 +25,12 @@ def run_web():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# 🧠 SMART MEMORY & LANGUAGE STORAGE
+# 🧠 SMART MEMORY & STORAGE
 active_users = set()
-user_languages = {} # Users ki bhasha yaad rakhne ke liye
+user_languages = {} 
+user_cooldowns = {} # ⏳ NAYA: Har user ka aakhri time save karne ke liye
+
+COOLDOWN_TIME = 60 # 60 second ka timer
 
 # 🌍 DICTIONARY: Hindi aur English ke messages
 LANG = {
@@ -37,7 +41,8 @@ LANG = {
         "sending": "📤 <b>Sending to Telegram... 🚀</b>",
         "success": "🎬 <b>Download Successful!</b> ✅\n\n⚡ <i>Powered by Rahul Kumar Raj</i>",
         "error": "❌ <b>Error:</b> Instagram blocked the request or the reel is private.",
-        "button_follow": "💖 Follow Rahul Kumar Raj 💖"
+        "button_follow": "💖 Follow Rahul Kumar Raj 💖",
+        "cooldown": "⏳ <b>Spam Protection:</b> Please wait {time} seconds before sending another link!" # Naya message
     },
     "hi": {
         "welcome": "🚀 <b>Insta Ninja Downloader v2.0</b> 🚀\n\nनमस्ते! मैं किसी भी Instagram Reel को हाई क्वालिटी में डाउनलोड कर सकता हूँ। ⚡\n\n🎯 <b>बस मुझे रील का लिंक भेजें!</b>\n\n👇 <b>Developer को सपोर्ट करने के लिए फॉलो करें:</b>",
@@ -46,7 +51,8 @@ LANG = {
         "sending": "📤 <b>टेलीग्राम पर भेजा जा रहा है... 🚀</b>",
         "success": "🎬 <b>Download Successful!</b> ✅\n\n⚡ <i>Powered by Rahul Kumar Raj</i>",
         "error": "❌ <b>Error:</b> Instagram ने रिक्वेस्ट रोक दी है या रील प्राइवेट है।",
-        "button_follow": "💖 Follow Rahul Kumar Raj 💖"
+        "button_follow": "💖 Follow Rahul Kumar Raj 💖",
+        "cooldown": "⏳ <b>स्पैम अलर्ट:</b> कृपया अगला लिंक भेजने से पहले {time} सेकंड प्रतीक्षा करें!" # Naya message
     }
 }
 
@@ -74,7 +80,6 @@ async def update_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await status_msg.edit_text(f"❌ <b>अपडेट फेल हो गया:</b> {e}", parse_mode='HTML')
 
-# 👇 NAYA START COMMAND (Language Option ke sath)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
@@ -87,7 +92,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-    # Language chunne ke buttons
     keyboard = [
         [InlineKeyboardButton("🇮🇳 Hindi", callback_data="lang_hi"),
          InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")]
@@ -95,14 +99,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("🌍 <b>Please select your language / अपनी भाषा चुनें:</b>", parse_mode='HTML', reply_markup=reply_markup)
 
-# 👇 BUTTON CLICK HANDLER (Jab user language chunta hai)
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
     data = query.data
 
-    # Bhasha set karna
     if data == "lang_hi":
         user_languages[user_id] = "hi"
         lang = "hi"
@@ -110,7 +112,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_languages[user_id] = "en"
         lang = "en"
     
-    # Welcome message bhejna selected bhasha me
     keyboard = [[InlineKeyboardButton(LANG[lang]["button_follow"], url=INSTA_LINK)]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(LANG[lang]["welcome"], parse_mode='HTML', reply_markup=reply_markup)
@@ -121,8 +122,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
 
-    # User ki bhasha check karna (Default 'hi' yani Hindi rahegi)
     lang = user_languages.get(user_id, "hi")
+
+    # 👇👇 NAYA COOLDOWN (TIMER) LOGIC YAHAN HAI 👇👇
+    if user_id != OWNER_ID: # Owner par timer nahi lagega
+        current_time = time.time()
+        if user_id in user_cooldowns:
+            time_passed = current_time - user_cooldowns[user_id]
+            if time_passed < COOLDOWN_TIME:
+                remaining_time = int(COOLDOWN_TIME - time_passed)
+                # Bachi hui seconds nikal kar message bhejna
+                cooldown_msg = LANG[lang]["cooldown"].replace("{time}", str(remaining_time))
+                await update.message.reply_text(cooldown_msg, parse_mode='HTML')
+                return # Yahan se wapas bhej do, aage ka code nahi chalega
+        
+        # Agar timer pass ho gaya, to naya time set kar do
+        user_cooldowns[user_id] = current_time
+    # 👆👆 COOLDOWN LOGIC KHATAM 👆👆
 
     if user_id != OWNER_ID and "instagram.com" in url:
         try:
@@ -187,10 +203,10 @@ def main():
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("update", update_bot))
-    application.add_handler(CallbackQueryHandler(button_click)) # Naya Button Handler
+    application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Bot is LIVE with Multi-Language Feature!")
+    print("🚀 Bot is LIVE with Multi-Language & Anti-Spam Cooldown!")
     application.run_polling()
 
 if __name__ == '__main__':
