@@ -2,6 +2,8 @@ import os
 import threading
 import yt_dlp
 import asyncio
+import subprocess
+import sys
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -11,7 +13,7 @@ INSTA_LINK = "https://instagram.com/rahul_kumar_raj_592"
 
 # VIP Channel ID (Yahan alerts aayenge)
 ADMIN_ID = -1003901141197 
-# Aapka Personal Telegram ID
+# Aapka Personal Telegram ID (Jisse Spy Alert aur Update command control hoga)
 OWNER_ID = 5868140731
 
 app = Flask(__name__)
@@ -27,8 +29,7 @@ def run_web():
 # 🧠 SMART MEMORY: Baar-baar alert rokne ke liye
 active_users = set()
 
-# 👇👇 NAYA MULTI-THREADING FUNCTION 👇👇
-# Yeh function background me chupke se download karega, taki bot hang na ho!
+# 👇 MULTI-THREADING FUNCTION (Bina hang hue background me download karne ke liye)
 def download_reel_sync(url, file_path):
     ydl_opts = {
         'outtmpl': file_path,
@@ -39,12 +40,35 @@ def download_reel_sync(url, file_path):
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
-# 👆👆 NAYA FUNCTION YAHAN KHATAM 👆👆
+
+# 🔄 AUTO-UPDATE SYSTEM (Sirf Rahul Ke Liye)
+async def update_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # Check karega ki kya ye aap (Owner) hain
+    if user_id != OWNER_ID:
+        return
+        
+    status_msg = await update.message.reply_text("⚙️ <b>yt-dlp का नया वर्ज़न ढूँढा जा रहा है... (इसमें 10-15 सेकंड लग सकते हैं)</b>", parse_mode='HTML')
+    
+    try:
+        # Server ke terminal me jaakar naya version install karna
+        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], check=True)
+        
+        await status_msg.edit_text("✅ <b>अपडेट सक्सेसफुल!</b> 🚀\nमैं नए सिस्टम के साथ 2 सेकंड में रीस्टार्ट हो रहा हूँ...", parse_mode='HTML')
+        
+        # Bot ko band karna (Render ise turant naye update ke sath wapas chalu kar dega)
+        await asyncio.sleep(2)
+        os._exit(0)
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ <b>अपडेट फेल हो गया:</b> {e}", parse_mode='HTML')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
 
+    # Naya User Alert
     if user_id not in active_users:
         active_users.add(user_id)
         try:
@@ -69,7 +93,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
 
-    # Spy Alert: Jab koi link bhejta hai
+    # 🕵️‍♂️ Spy Alert: Jab koi link bhejta hai
     if user_id != OWNER_ID and "instagram.com" in url:
         try:
             spy_msg = f"🕵️‍♂️ <b>Spy Log!</b>\n👤 Naam: {user_name}\n🔗 <b>Link:</b> {url}"
@@ -86,18 +110,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     file_path = f"reel_{chat_id}.mp4"
 
-    # Auto-Retry System
+    # 🔄 Auto-Retry System
     max_retries = 3
     download_success = False
 
     for attempt in range(max_retries):
         try:
-            # 🚀 JADOO YAHAN HAI: asyncio.to_thread download ko background me bhej dega
+            # 🚀 JADOO: asyncio.to_thread download ko background me bhej dega (Multi-threading)
             await asyncio.to_thread(download_reel_sync, url, file_path)
 
             if os.path.exists(file_path):
                 download_success = True
-                break # Video mil gaya, loop se bahar
+                break # Video mil gaya, loop se bahar aa jao
 
         except Exception as e:
             print(f"Attempt {attempt + 1} Failed: {e}")
@@ -107,7 +131,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.edit_text("❌ <b>Error:</b> Instagram ne request rok di hai. Kripya thodi der baad dubara try karein.", parse_mode='HTML')
         return
 
-    # Telegram par bhejna
+    # 📤 Telegram par bhejna
     try:
         await status_msg.edit_text("📤 <b>Telegram par bheja ja raha hai... 🚀</b>", parse_mode='HTML')
 
@@ -141,10 +165,13 @@ def main():
     threading.Thread(target=run_web, daemon=True).start()
     
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    # Handlers Add kiye gaye hain
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("update", update_bot)) # Naya Auto-Update handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Bot is LIVE with HTML Tags, Spy Mode, Auto-Retry & Multi-Threading!")
+    print("🚀 Bot is LIVE with HTML Tags, Spy Mode, Auto-Retry, Multi-Threading & Auto-Update!")
     application.run_polling()
 
 if __name__ == '__main__':
