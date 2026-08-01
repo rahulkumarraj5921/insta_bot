@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 import uuid 
+import urllib.request # 📸 Naya import photo download karne ke liye
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultVideo, InlineQueryResultPhoto
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
@@ -58,24 +59,67 @@ LANG = {
     }
 }
 
-# 📥 DYNAMIC DOWNLOAD LOGIC (Supports Photos & Videos)
+# 📥 DYNAMIC DOWNLOAD LOGIC (Smart separation for Photos & Videos)
 def download_media_sync(url, chat_id):
-    ydl_opts = {
-        'outtmpl': f'media_{chat_id}.%(ext)s',
-        'format': 'best',
+    # Step 1: Pehle check karo ki link me kya hai (Photo ya Video)
+    ydl_opts_info = {
         'quiet': True,
         'noplaylist': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        return ydl.prepare_filename(info)
+    with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
+        info = ydl.extract_info(url, download=False)
+        if not info: return None
+        
+        # Agar carousel (multiple photos) hai to pehla item lo
+        if 'entries' in info:
+            info = info['entries'][0]
+
+        is_video = info.get('ext') in ['mp4', 'webm', 'mov'] or info.get('vcodec') != 'none'
+
+        if is_video:
+            # Agar video/gaane wali photo hai to yt-dlp use karo
+            ydl_opts_vid = {
+                'outtmpl': f'media_{chat_id}.%(ext)s',
+                'format': 'best',
+                'quiet': True,
+                'noplaylist': True,
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+            }
+            with yt_dlp.YoutubeDL(ydl_opts_vid) as ydl_vid:
+                info_dl = ydl_vid.extract_info(url, download=True)
+                if 'entries' in info_dl:
+                    info_dl = info_dl['entries'][0]
+                return ydl_vid.prepare_filename(info_dl)
+        else:
+            # Agar normal photo hai to direct download karo (Isse error nahi aayega)
+            media_url = info.get('url')
+            if not media_url and 'thumbnails' in info and len(info['thumbnails']) > 0:
+                media_url = info['thumbnails'][-1]['url']
+            
+            if media_url:
+                ext = info.get('ext', 'jpg')
+                if ext not in ['jpg', 'jpeg', 'png', 'webp']:
+                    ext = 'jpg'
+                file_path = f'media_{chat_id}.{ext}'
+                req = urllib.request.Request(media_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                with urllib.request.urlopen(req) as response, open(file_path, 'wb') as out_file:
+                    out_file.write(response.read())
+                return file_path
+    return None
 
 # 🔍 INLINE MODE LOGIC 
 def extract_direct_link_sync(url):
-    ydl_opts = {'format': 'best', 'quiet': True, 'noplaylist': True}
+    ydl_opts = {'quiet': True, 'noplaylist': True} # Yahan se 'format': 'best' hata diya hai photo support ke liye
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        return ydl.extract_info(url, download=False)
+        info = ydl.extract_info(url, download=False)
+        if 'entries' in info:
+            info = info['entries'][0]
+            
+        if not info.get('url') and 'thumbnails' in info and len(info['thumbnails']) > 0:
+            info['url'] = info['thumbnails'][-1]['url']
+            info['ext'] = 'jpg'
+        return info
 
 # 🔄 AUTO-UPDATE
 async def update_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -276,9 +320,8 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(InlineQueryHandler(inline_query))
     
-    print("🚀 Bot is LIVE with Photo & Video Support!")
+    print("🚀 Bot is LIVE with Smart Photo & Video Support!")
     application.run_polling()
 
 if __name__ == '__main__':
     main()
-
