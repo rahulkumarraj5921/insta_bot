@@ -7,7 +7,7 @@ import sys
 import time
 import uuid 
 from flask import Flask
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultVideo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultVideo, InlineQueryResultPhoto
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
 
 TELEGRAM_BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -42,27 +42,27 @@ LANG = {
         "processing": "⚙️ <b>Extracting media from server...</b>",
         "sending": "📤 <b>Sending to Telegram... 🚀</b>",
         "success": "🎬 <b>Download Successful!</b> ✅\n\n⚡ <i>Powered by Rahul Kumar Raj</i>",
-        "error": "❌ <b>Error:</b> Instagram blocked the request, or the post is private.",
+        "error": "❌ <b>Error:</b> Instagram blocked the request or the account is private.",
         "button_follow": "💖 Follow Rahul Kumar Raj 💖",
         "cooldown": "⏳ <b>Spam Protection:</b> Please wait {time} seconds before sending another link!" 
     },
     "hi": {
-        "welcome": "🚀 <b>Insta Ninja Downloader v2.0</b> 🚀\n\nनमस्ते! मैं किसी भी Instagram Reel या Photo को हाई क्वालिटी में डाउनलोड कर सकता हूँ। ⚡\n\n🎯 <b>बस मुझे रील या फोटो का लिंक भेजें!</b>\n\n👇 <b>Developer को सपोर्ट करने के लिए फॉलो करें:</b>",
+        "welcome": "🚀 <b>Insta Ninja Downloader v2.0</b> 🚀\n\nनमस्ते! मैं किसी भी Instagram Reel या Photo को हाई क्वालिटी में डाउनलोड कर सकता हूँ। ⚡\n\n🎯 <b>बस मुझे पोस्ट का लिंक भेजें!</b>\n\n👇 <b>Developer को सपोर्ट करने के लिए फॉलो करें:</b>",
         "invalid": "⚠️ <b>दोस्त, कृपया सही Instagram लिंक भेजें!</b>",
         "processing": "⚙️ <b>सर्वर से मीडिया निकाला जा रहा है...</b>",
         "sending": "📤 <b>टेलीग्राम पर भेजा जा रहा है... 🚀</b>",
         "success": "🎬 <b>Download Successful!</b> ✅\n\n⚡ <i>Powered by Rahul Kumar Raj</i>",
-        "error": "❌ <b>Error:</b> Instagram ने रिक्वेस्ट रोक दी है या पोस्ट प्राइवेट है।",
+        "error": "❌ <b>Error:</b> Instagram ने रिक्वेस्ट रोक दी है या अकाउंट प्राइवेट है।",
         "button_follow": "💖 Follow Rahul Kumar Raj 💖",
         "cooldown": "⏳ <b>स्पैम अलर्ट:</b> कृपया अगला लिंक भेजने से पहले {time} सेकंड प्रतीक्षा करें!" 
     }
 }
 
-# 📥 DYNAMIC DOWNLOAD LOGIC (Reels & Photos with Audio)
+# 📥 DYNAMIC DOWNLOAD LOGIC (Supports Photos & Videos)
 def download_media_sync(url, chat_id):
     ydl_opts = {
-        'outtmpl': f"media_{chat_id}.%(ext)s",
-        'format': 'bestvideo+bestaudio/best', # Yeh audio aur video dono fetch karega
+        'outtmpl': f'media_{chat_id}.%(ext)s',
+        'format': 'best',
         'quiet': True,
         'noplaylist': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
@@ -105,7 +105,6 @@ async def get_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 📢 ADMIN BROADCAST FEATURE
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    
     if user_id != OWNER_ID:
         return
 
@@ -165,7 +164,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton(LANG[lang]["button_follow"], url=INSTA_LINK)]]
         await query.edit_message_text(LANG[lang]["welcome"], parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
-# 💬 NORMAL CHAT HANDLER 
+# 💬 NORMAL CHAT HANDLER (UPDATED FOR PHOTOS & VIDEOS)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     raw_url = update.message.text
@@ -191,21 +190,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     status_msg = await update.message.reply_text(LANG[lang]["processing"], parse_mode='HTML')
-    await context.bot.send_chat_action(chat_id=chat_id, action='upload_video')
 
-    download_success = False
     downloaded_file = None
 
     for attempt in range(3):
         try:
             downloaded_file = await asyncio.to_thread(download_media_sync, clean_url, chat_id)
             if downloaded_file and os.path.exists(downloaded_file): 
-                download_success = True
                 break
         except Exception: 
             await asyncio.sleep(2)
 
-    if not download_success or not downloaded_file:
+    if not downloaded_file or not os.path.exists(downloaded_file):
         await status_msg.edit_text(LANG[lang]["error"], parse_mode='HTML')
         return
 
@@ -213,25 +209,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.edit_text(LANG[lang]["sending"], parse_mode='HTML')
         keyboard = [[InlineKeyboardButton(LANG[lang]["button_follow"], url=INSTA_LINK)]]
         
-        # Check agar file video hai ya photo
-        if downloaded_file.lower().endswith(('.mp4', '.mkv', '.webm')):
+        # Check file extension to send as Photo or Video
+        ext = downloaded_file.lower().split('.')[-1]
+        
+        if ext in ['mp4', 'mov', 'mkv', 'webm']:
+            await context.bot.send_chat_action(chat_id=chat_id, action='upload_video')
             with open(downloaded_file, 'rb') as video_file:
                 await context.bot.send_video(chat_id=chat_id, video=video_file, caption=LANG[lang]["success"], parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-        else:
-            # Agar file sirf image hai (.jpg, .png)
+        elif ext in ['jpg', 'jpeg', 'png', 'webp']:
+            await context.bot.send_chat_action(chat_id=chat_id, action='upload_photo')
             with open(downloaded_file, 'rb') as photo_file:
                 await context.bot.send_photo(chat_id=chat_id, photo=photo_file, caption=LANG[lang]["success"], parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await context.bot.send_chat_action(chat_id=chat_id, action='upload_document')
+            with open(downloaded_file, 'rb') as doc_file:
+                await context.bot.send_document(chat_id=chat_id, document=doc_file, caption=LANG[lang]["success"], parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
                 
         await status_msg.delete()
         total_downloads += 1
     except Exception:
         await status_msg.edit_text(LANG[lang]["error"], parse_mode='HTML')
     finally:
-        # Hamesha file delete karein, chahe wo MP4 ho ya JPG
         if downloaded_file and os.path.exists(downloaded_file): 
             os.remove(downloaded_file)
 
-# 👇 INLINE QUERY HANDLER 
+# 👇 INLINE QUERY HANDLER (UPDATED FOR PHOTOS)
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query
     if not query or "instagram.com" not in query: return
@@ -244,10 +246,17 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         info = await asyncio.to_thread(extract_direct_link_sync, clean_query)
         if not info or 'url' not in info: return
-        video_url = info['url']
+        
+        media_url = info['url']
+        ext = info.get('ext', 'mp4')
         thumb_url = info.get('thumbnail', 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/132px-Instagram_logo_2016.svg.png')
         keyboard = [[InlineKeyboardButton("🔥 Created by Rahul Kumar Raj 🔥", url=INSTA_LINK)]]
-        result = [InlineQueryResultVideo(id=str(uuid.uuid4()), video_url=video_url, mime_type="video/mp4", thumb_url=thumb_url, title="🎬 Send Instagram Reel/Photo", description="Click here to send media!", caption="⚡ <i>Powered by Insta Ninja</i>", parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))]
+        
+        if ext in ['jpg', 'jpeg', 'png', 'webp']:
+            result = [InlineQueryResultPhoto(id=str(uuid.uuid4()), photo_url=media_url, thumb_url=thumb_url, title="📷 Send Instagram Photo", description="Click here to send photo!", caption="⚡ <i>Powered by Insta Ninja</i>", parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))]
+        else:
+            result = [InlineQueryResultVideo(id=str(uuid.uuid4()), video_url=media_url, mime_type="video/mp4", thumb_url=thumb_url, title="🎬 Send Instagram Media", description="Click here to send media!", caption="⚡ <i>Powered by Insta Ninja</i>", parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))]
+            
         await update.inline_query.answer(result, cache_time=10)
         global total_downloads
         total_downloads += 1
@@ -261,13 +270,13 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("update", update_bot))
     application.add_handler(CommandHandler("stats", get_stats)) 
-    application.add_handler(CommandHandler("broadcast", broadcast))
+    application.add_handler(CommandHandler("broadcast", broadcast)) 
     
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(InlineQueryHandler(inline_query))
     
-    print("🚀 Bot is LIVE with Photo + Song Support!")
+    print("🚀 Bot is LIVE with Photo & Video Support!")
     application.run_polling()
 
 if __name__ == '__main__':
