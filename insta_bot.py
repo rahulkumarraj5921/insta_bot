@@ -6,7 +6,7 @@ import subprocess
 import sys
 import time
 import uuid 
-import urllib.request # 📸 Naya import photo download karne ke liye
+import urllib.request
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultVideo, InlineQueryResultPhoto
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
@@ -59,9 +59,8 @@ LANG = {
     }
 }
 
-# 📥 DYNAMIC DOWNLOAD LOGIC (Smart separation for Photos & Videos)
+# 📥 DYNAMIC DOWNLOAD LOGIC (Now Forces Audio Inclusion)
 def download_media_sync(url, chat_id):
-    # Step 1: Pehle check karo ki link me kya hai (Photo ya Video)
     ydl_opts_info = {
         'quiet': True,
         'noplaylist': True,
@@ -71,17 +70,16 @@ def download_media_sync(url, chat_id):
         info = ydl.extract_info(url, download=False)
         if not info: return None
         
-        # Agar carousel (multiple photos) hai to pehla item lo
         if 'entries' in info:
             info = info['entries'][0]
 
         is_video = info.get('ext') in ['mp4', 'webm', 'mov'] or info.get('vcodec') != 'none'
 
         if is_video:
-            # Agar video/gaane wali photo hai to yt-dlp use karo
+            # 🔥 AUDIO FIX: acodec!=none ensure karega ki bina gaane wala video download na ho
             ydl_opts_vid = {
                 'outtmpl': f'media_{chat_id}.%(ext)s',
-                'format': 'best',
+                'format': 'best[ext=mp4][acodec!=none]/best[acodec!=none]/best', 
                 'quiet': True,
                 'noplaylist': True,
                 'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
@@ -92,7 +90,6 @@ def download_media_sync(url, chat_id):
                     info_dl = info_dl['entries'][0]
                 return ydl_vid.prepare_filename(info_dl)
         else:
-            # Agar normal photo hai to direct download karo (Isse error nahi aayega)
             media_url = info.get('url')
             if not media_url and 'thumbnails' in info and len(info['thumbnails']) > 0:
                 media_url = info['thumbnails'][-1]['url']
@@ -110,9 +107,10 @@ def download_media_sync(url, chat_id):
 
 # 🔍 INLINE MODE LOGIC 
 def extract_direct_link_sync(url):
-    ydl_opts = {'quiet': True, 'noplaylist': True} # Yahan se 'format': 'best' hata diya hai photo support ke liye
+    ydl_opts = {'quiet': True, 'noplaylist': True} 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
+        if not info: return None
         if 'entries' in info:
             info = info['entries'][0]
             
@@ -208,7 +206,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton(LANG[lang]["button_follow"], url=INSTA_LINK)]]
         await query.edit_message_text(LANG[lang]["welcome"], parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
-# 💬 NORMAL CHAT HANDLER (UPDATED FOR PHOTOS & VIDEOS)
+# 💬 NORMAL CHAT HANDLER 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     raw_url = update.message.text
@@ -253,7 +251,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.edit_text(LANG[lang]["sending"], parse_mode='HTML')
         keyboard = [[InlineKeyboardButton(LANG[lang]["button_follow"], url=INSTA_LINK)]]
         
-        # Check file extension to send as Photo or Video
         ext = downloaded_file.lower().split('.')[-1]
         
         if ext in ['mp4', 'mov', 'mkv', 'webm']:
@@ -277,7 +274,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if downloaded_file and os.path.exists(downloaded_file): 
             os.remove(downloaded_file)
 
-# 👇 INLINE QUERY HANDLER (UPDATED FOR PHOTOS)
+# 👇 INLINE QUERY HANDLER 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query
     if not query or "instagram.com" not in query: return
@@ -320,8 +317,9 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(InlineQueryHandler(inline_query))
     
-    print("🚀 Bot is LIVE with Smart Photo & Video Support!")
+    print("🚀 Bot is LIVE with Smart Audio/Video Fix!")
     application.run_polling()
 
 if __name__ == '__main__':
     main()
+
